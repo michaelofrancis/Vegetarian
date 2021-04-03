@@ -1,82 +1,60 @@
-library(rlang)
 library(plyr)
 library(dplyr)
 library(tidyverse)
 
-ukbveg <- read.delim("UKB34137_QC_and_24HR.txt", header = TRUE, sep="\t")
-ukbveg <- as_tibble(ukbveg)
+#Michael Francis, 04-03-2021
+#The key of this script is solving the problem that if someone has an
+#NA in field 20086 (24hr-recall: special diet followed), it could be 
+#because they did not answer this question, or because they didn't 
+#take the 24h recall. This parses out the answer to that question.
 
-nrow(ukbveg) #135411 
+#Load UK Biobank datasets-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+source('../ukb34137_loaddata.r') #15 min
+bd <- as_tibble(bd)
 
-ukbveg
-#check with identical function ukbveg and bd
+#UKB data for people who took the 24hour recall survey
+bd24<-as_tibble(read.table("UKB_24hourRecall-ParticipantInstancesTaken.txt",
+                 header=TRUE, stringsAsFactors = FALSE))
+#sum(bd24$ever_took_24HR)#[1] 211018
 
 #24hr special diet columns
-VegAnswers<-ukbveg%>%select(f.eid, f.20086.0.0, f.20086.1.0,
+SpecialDiet<-bd%>%select(f.eid, f.20086.0.0, f.20086.1.0,
                             f.20086.2.0, f.20086.3.0, f.20086.4.0)
 
-#column names for tibble
-colnames(VegAnswers)<- c("FID", "Veg0","Veg1", "Veg2", "Veg3", "Veg4")
-
-VegAnswers
+#Column names
+colnames(SpecialDiet)<- c("IID", "Veg0","Veg1", "Veg2", "Veg3", "Veg4")
+table(SpecialDiet$Veg0) 
 
 
 #***Use sapply here to perform repeated functions over columns***
 #Code columns so vegetarian or vegan = 1, other = 0
-VegAnswers[,2:6]<-sapply(VegAnswers[,2:6], as.character)
-VegAnswers[,2:6]<-sapply(VegAnswers[,2:6], 
-                         mapvalues, c(NA, "Low calorie", "Gluten-free", "Lactose-free", "Other",
-                                      "Vegetarian", "Vegan"), c(0,0,0,0,0,1,1))
-
-VegAnswers
-#******************************************************************
-#Get 24h recall taken data-----------
-daycols<-c("f.20080.0.0", "f.20080.1.0", "f.20080.2.0",
-           "f.20080.3.0", "f.20080.4.0")
-bd1<-ukbveg
-#Change all the values to characters for easier manipulation
-bd1<-apply(bd1[,daycols], 2, as.character)
-#Change NA's to zeros and days to 1's
-bd1[(is.na(bd1[,daycols]))]<-0
-bd1[bd1[,daycols]!="0"] <-1
-#Change these back to numeric
-bd1<-apply(bd1[,daycols], 2, as.integer)
-#Now make a new column, everyone with rowSums zero write FALSE
-#and those with >0 write TRUE
-sum<-apply(bd1[,daycols], 1, sum)
-bd1<-as.data.frame(bd1)
-bd1<-bd1 %>% mutate (took_24HR = sum)
-bd1<-bd1%>% mutate(took_24HR = replace(took_24HR, took_24HR>0, "Yes")) %>%
-    mutate(took_24HR = replace(took_24HR, took_24HR==0, "No"))
-sum(bd1$took_24HR=="Yes") #[1] 135411 **SUCCESS**
-bd1$FID<-ukbveg$f.eid
-bd1<-as_tibble(bd1)
-bd1
-#--------------
+SpecialDiet[,2:6]<-sapply(SpecialDiet[,2:6], as.character)
+SpecialDiet[,2:6]<-sapply(SpecialDiet[,2:6], 
+                         mapvalues, c(NA, "Low calorie", "Gluten-free", 
+                                      "Lactose-free", "Other",
+                                      "Vegetarian", "Vegan"), 
+                         c(0,0,0,0,0,1,1))
 
 ###This section creates a table that has both answers to special diet
 ###columns (Veg0-4) and columns indicating whether people took the
 ###24hr survey (took0-4)
-bd1
 
-TooksurveyAndVeg <- merge(VegAnswers, bd1, by="FID")
-
+TooksurveyAndVeg <- left_join(SpecialDiet, bd24,  by=c("IID"))
 TooksurveyAndVeg<-as_tibble(TooksurveyAndVeg)
-TooksurveyAndVeg
+TooksurveyAndVeg<-TooksurveyAndVeg[TooksurveyAndVeg$ever_took_24HR==1,]
+TooksurveyAndVeg<-TooksurveyAndVeg%>%select(-ever_took_24HR)
 
 colnames(TooksurveyAndVeg)[7:11]<-c("took0", "took1", "took2", "took3", "took4")
-table(TooksurveyAndVeg$took_24HR)
+#nrow(TooksurveyAndVeg) #[1] 211018
 
-nrow(TooksurveyAndVeg) #[1] 135411
-
-#TooksurveyAndVeg[!complete.cases(TooksurveyAndVeg),]
+#TooksurveyAndVeg[!complete.cases(TooksurveyAndVeg),] #0
 
 #initialize answer columns
-TooksurveyAndVeg$Answer0<-"d" #column 13
-TooksurveyAndVeg$Answer1<-"d" #column 14
-TooksurveyAndVeg$Answer2<-"d" #column 15
-TooksurveyAndVeg$Answer3<-"d" #column 16
-TooksurveyAndVeg$Answer4<-"d" #column 17
+TooksurveyAndVeg$Answer0<-"d" #column 12
+TooksurveyAndVeg$Answer1<-"d" #column 13
+TooksurveyAndVeg$Answer2<-"d" #column 14
+TooksurveyAndVeg$Answer3<-"d" #column 15
+TooksurveyAndVeg$Answer4<-"d" #column 16
 
 #There are 4 conditions here:
 #a) took survey, was vegetarian
@@ -90,13 +68,14 @@ for(instance in 7:11){ #columns 7 through 11 are the "took" columns
     for(row in 1:nrow(TooksurveyAndVeg)){ #loop through every row in the table
         if(TooksurveyAndVeg[row, instance] == 1){ #if they took the survey in this instance
             if(TooksurveyAndVeg[row, instance-5]==1){ #if they had 1 in the same instance of veg
-                TooksurveyAndVeg[row, instance+6]<-"a" 
+                TooksurveyAndVeg[row, instance+5]<-"a" 
             }
-            else TooksurveyAndVeg[row, instance+6]<-"b"
+            else TooksurveyAndVeg[row, instance+5]<-"b"
         }
-        else(TooksurveyAndVeg[row, instance+6]<-"c")
+        else(TooksurveyAndVeg[row, instance+5]<-"c")
     }
 }
+
 
 TooksurveyAndVeg
 #adding column for diet 
@@ -106,14 +85,7 @@ TooksurveyAndVeg$Diet2<-"0"
 TooksurveyAndVeg$Diet3<-"0"
 TooksurveyAndVeg$Diet4<-"0"
 
-#TooksurveyAndVeg2<-TooksurveyAndVeg
-
-
-
 #********************************************************************
-#This above section also be done with subsetting like the following
-#which drastically speeds up the process
-
 #set b's to -100 because they once answered that they were not 
 #vegetarian in the survey; we are only looking to designate people 
 #with 100% of answers as yes vegetarian
@@ -141,7 +113,7 @@ TooksurveyAndVeg$Diet4[TooksurveyAndVeg$Answer4=="c"]<-0
 
 #********************************************************************
 
-Diet<-TooksurveyAndVeg%>%select(FID, Diet0, Diet1, Diet2, Diet3, Diet4) #subsetting information
+Diet<-TooksurveyAndVeg%>%select(IID, Diet0, Diet1, Diet2, Diet3, Diet4) #subsetting information
 
 Diet
 
@@ -163,11 +135,10 @@ Diet$Veg[Diet$row_sum < 0]<-"Non-vegetarian"
 Diet$Veg[Diet$row_sum > 0]<-"Vegetarian"
 
 Diet
-Diet%>%filter(Veg== "Vegetarian") #3321
-Diet%>%filter(Veg== "Non-vegetarian") #132090
+Diet%>%filter(Veg== "Vegetarian") #5,738
+Diet%>%filter(Veg== "Non-vegetarian") #205,280
+5738/205280#[1] 0.02795207
 
-
-#Diet #135,411 TOTAL 
 
 Diet$Vegb<-0 #creating column for final answer
 
@@ -176,10 +147,10 @@ Diet$Vegb[Diet$Veg ==  "Vegetarian" ]<-1
 
 sum(Diet$Vegb) #[1] 3321
 
-veg<-Diet%>%select("FID", "Vegb")
+veg<-Diet%>%select("IID", "Vegb")
 
-veg
+colnames(veg)<-c("IID", "Consistent_Self-Reported_Vegetarian_across_all_24hr")
 
-write.table(veg, file = "vegQC_03262021.txt", 
+write.table(veg, file = "vegQC1_04032021.txt", 
             sep = "\t", col.names = TRUE, quote = FALSE,
             row.names = FALSE)
