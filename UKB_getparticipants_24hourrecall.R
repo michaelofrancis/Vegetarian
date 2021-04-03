@@ -3,8 +3,9 @@ library(dplyr)
 library(tidyverse)
 
 
-#This script generates a list of UKB participants that took
-#at least one instance of the 24 hour recall survey
+#This script generates data for which instances of the 24HR
+#that UKB participants took.
+#https://biobank.ndph.ox.ac.uk/ukb/field.cgi?id=20080
 
 source('../ukb34137_loaddata.r') #15 min
 bd <- as_tibble(bd)
@@ -28,6 +29,9 @@ sum<-apply(bd1[,daycols], 1, sum)
 bd1$took_24HR<- sum
 bd1$took_24HR[bd1$took_24HR>0]<-1
 sum(bd1$took_24HR) #[1] 211018
-bdtook24<-bd1[bd1$took_24HR==1,]
-took24<-bdtook24$f.eid
-write.table(took24, "UKB_participantID_took24hourrecall.txt", quote=FALSE, row.names=FALSE)
+colnames(bd1)<-c("IID", "RecallInstance0", "RecallInstance1",
+                 "RecallInstance2","RecallInstance3","RecallInstance4",
+                 "ever_took_24HR")
+
+write.table(bd1, "UKB_24hourRecall-ParticipantInstancesTaken.txt",
+            quote=FALSE, row.names=FALSE)
