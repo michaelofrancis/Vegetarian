@@ -24,6 +24,7 @@ bd <- as_tibble(bd)
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=
 
 #UKB data for people who took the 24hour recall survey
+#From UKB_getparticipants_24hourrecall.R
 bd24<-as_tibble(read.table("UKB_24hourRecall-ParticipantInstancesTaken.txt",
                            header=TRUE, stringsAsFactors = FALSE))
 
